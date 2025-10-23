@@ -1,0 +1,6 @@
+<launch>
+  <include file="$(find elevation_mapping_cupy)/launch/depth2pc.launch"/>
+  <include file="$(find elevation_mapping_cupy)/launch/carla_rgb.launch"/>
+  <include file="$(find elevation_mapping_cupy)/launch/carla_bev.launch"/>
+  
+</launch>

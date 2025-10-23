@@ -1,0 +1,69 @@
+plugin_config_file: '$(rospack find elevation_mapping_cupy)/config/core/plugin_config.yaml'
+
+pointcloud_channel_fusions:
+  rgb: 'color'                # 'color' fusion is used for the 'rgb' channel
+  default: 'average'          # 'average' fusion is used for channels not listed here
+
+image_channel_fusions:
+  rgb: 'color'                # 'color' fusion is used for the 'rgb' channel
+  default: 'exponential'      # 'exponential' fusion is used for channels not listed here
+  feat_.*: 'exponential'      # 'exponential' fusion is also used for any channel starting with 'feat_' Regular expressions can be used for channel names
+
+subscribers:
+  # pointcloud_sensor_name:
+  #   topic_name: '/carla/ego_vehicle/velodyne'
+  #   data_type:  pointcloud  # pointcloud or image
+  front_cam1:
+    topic_name: '/camera/depth/points_front'
+    data_type: pointcloud
+  rear_cam1:
+    topic_name: '/camera/depth/points_rear'
+    data_type: pointcloud
+  left_cam1:
+    topic_name: '/camera/depth/points_left'
+    data_type: pointcloud
+  right_cam1:
+    topic_name: '/camera/depth/points_right'
+    data_type: pointcloud
+  bev_cam:
+    topic_name: '/camera/depth/points_bev'
+    data_type: pointcloud
+  color_cam_bev: # for color camera
+    topic_name: '/carla/ego_vehicle/semantic_camera_bev/image_rgb'
+    camera_info_topic_name: '/carla/ego_vehicle/semantic_camera_bev/camera_info'
+    data_type: image
+  front_cam:
+    topic_name: '/camera/depth/gt_points_ne'
+    data_type: pointcloud
+  rear_cam:
+    topic_name: '/camera/depth/gt_points_nw'
+    data_type: pointcloud
+  left_cam:
+    topic_name: '/camera/depth/gt_points_sw'
+    data_type: pointcloud
+  right_cam:
+    topic_name: '/camera/depth/gt_points_se'
+    data_type: pointcloud
+  color_cam_front: # for color camera
+    topic_name: '/carla/ego_vehicle/gt_semantic_camera_ne/image_rgb'
+    camera_info_topic_name: '/carla/ego_vehicle/gt_semantic_camera_ne/camera_info'
+    data_type: image
+  color_cam_rear: # for color camera
+    topic_name: '/carla/ego_vehicle/gt_semantic_camera_nw/image_rgb'
+    camera_info_topic_name: '/carla/ego_vehicle/gt_semantic_camera_nw/camera_info'
+    data_type: image
+  color_cam_left: # for color camera
+    topic_name: '/carla/ego_vehicle/gt_semantic_camera_sw/image_rgb'
+    camera_info_topic_name: '/carla/ego_vehicle/gt_semantic_camera_sw/camera_info'
+    data_type: image
+  color_cam_right: # for color camera
+    topic_name: '/carla/ego_vehicle/gt_semantic_camera_se/image_rgb'
+    camera_info_topic_name: '/carla/ego_vehicle/gt_semantic_camera_se/camera_info'
+    data_type: image
+
+publishers:
+  elevation_map_raw:
+    # layers: ['rgb', 'elevation', 'traversability', 'min_filter', 'inpaint', 'rgb2', 'elevation2']
+    layers: ['rgb', 'elevation', 'min_filter', 'inpaint', 'traversability']
+    basic_layers: ['min_filter']
+    fps: 10.0

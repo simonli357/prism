@@ -1,0 +1,13 @@
+<launch>
+  <!-- <include file="$(find elevation_mapping_cupy)/launch/depth2pc.launch"/> -->
+  <node pkg="elevation_mapping_cupy"
+        type="elevation_mapping_node"
+        name="elevation_mapping1"
+        output="screen">
+    <rosparam command="load" file="$(find elevation_mapping_cupy)/config/core/core_carla.yaml"/>
+    <rosparam command="load" file="$(find elevation_mapping_cupy)/config/core/carla_setup.yaml"/>
+  </node>
+  <!-- <arg name="rviz_config" default="$(find elevation_mapping_cupy)/rviz/carla.rviz"/>
+  <node name="rviz1" pkg="rviz" type="rviz" args="-d $(arg rviz_config)"/> -->
+  <!-- <node name="rviz2" pkg="rviz" type="rviz" args="-d $(arg rviz_config)"/> -->
+</launch>

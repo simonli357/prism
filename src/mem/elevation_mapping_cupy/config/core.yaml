@@ -1,0 +1,7 @@
+map_frame: 'odom'
+base_frame: 'base'
+resolution: 0.05
+map_length: 10.0
+use_initializer_at_start: true
+initialize_frame_id: ['base']
+initialize_tf_offset: [0.0, 0.0, 0.0, 0.0]

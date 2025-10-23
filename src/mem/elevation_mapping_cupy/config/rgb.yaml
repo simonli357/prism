@@ -1,0 +1,18 @@
+# my_rgb_setup.yaml
+plugin_config_file: '$(rospack find elevation_mapping_cupy)/config/core/plugin_config.yaml'
+
+image_channel_fusions:
+  rgb: 'color'
+  default: 'exponential'
+
+subscribers:
+  rgb_cam:
+    topic_name: '/emc/image_raw'                    # raw RGB from step 1
+    camera_info_topic_name: '/boxi/hdr/front/camera_info'
+    data_type: image
+
+publishers:
+  elevation_map_raw:
+    layers: ['elevation', 'variance', 'rgb']
+    basic_layers: ['elevation']
+    fps: 5.0

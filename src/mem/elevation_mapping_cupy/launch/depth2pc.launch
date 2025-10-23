@@ -1,0 +1,54 @@
+
+<launch>
+  <node pkg="elevation_mapping_cupy" type="rgb3.py" name="strip_alpha_rgb8" output="screen"/>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud1" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/camera_front_depth/image"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/camera_front_depth/camera_info"/>
+    <remap from="points"      to="/camera/depth/points_front"/>
+  </node>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud2" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/camera_right_depth/image"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/camera_right_depth/camera_info"/>
+    <remap from="points"      to="/camera/depth/points_right"/>
+  </node>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud3" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/camera_left_depth/image"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/camera_left_depth/camera_info"/>
+    <remap from="points"      to="/camera/depth/points_left"/>
+  </node>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud4" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/camera_rear_depth/image"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/camera_rear_depth/camera_info"/>
+    <remap from="points"      to="/camera/depth/points_rear"/>
+  </node>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud5" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/camera_bev_depth/image_erased"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/camera_bev_depth/camera_info_synced"/>
+    <remap from="points"      to="/camera/depth/points_bev"/>
+  </node>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud6" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/gt_camera_depth_ne/image"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/gt_camera_depth_ne/camera_info"/>
+    <remap from="points"      to="/camera/depth/gt_points_ne"/>
+  </node>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud7" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/gt_camera_depth_nw/image"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/gt_camera_depth_nw/camera_info"/>
+    <remap from="points"      to="/camera/depth/gt_points_nw"/>
+  </node>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud8" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/gt_camera_depth_sw/image"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/gt_camera_depth_sw/camera_info"/>
+    <remap from="points"      to="/camera/depth/gt_points_sw"/>
+  </node>
+  <node pkg="nodelet" type="nodelet" name="depth_to_cloud9" args="standalone depth_image_proc/point_cloud_xyz">
+    <remap from="image_rect"  to="/carla/ego_vehicle/gt_camera_depth_se/image"/>
+    <remap from="camera_info" to="/carla/ego_vehicle/gt_camera_depth_se/camera_info"/>
+    <remap from="points"      to="/camera/depth/gt_points_se"/>
+  </node>
+
+  <!-- <node pkg="semantic_sensor" type="image_node.py" name="front_cam" args="front_cam_image"
+          output="screen">
+        <rosparam command="load" file="$(find semantic_sensor)/config/sensor_parameter.yaml"/>
+    </node> -->
+</launch>
