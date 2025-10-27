@@ -67,7 +67,7 @@ rgb2:
     value: 2.0                           # This is an example parameter
 traversability2:
   enable: True
-  type: "traversability2"
+  type: "example"
   fill_nan: False
   is_height_layer: False
   layer_name: "traversability2"
@@ -75,7 +75,7 @@ traversability2:
     input_layer_name: "elevation2"
 combined_cost:
   enable: True
-  type: "combined_cost"
+  type: "example"
   fill_nan: False
   is_height_layer: False   
   layer_name: "combined_cost" 

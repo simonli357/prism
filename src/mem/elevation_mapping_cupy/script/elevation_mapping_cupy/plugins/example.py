@@ -4,15 +4,27 @@ from elevation_mapping_cupy.plugins.plugin_manager import PluginBase
 from elevation_mapping_cupy.plugins.custom.infer import InferenceHandler
 
 class MultiOutputPlugin(PluginBase):
-    def __init__(self, cell_n: int = 100,  
+    def __init__(self, 
+                 cell_n: int = 100,  
+                 rgb_weight: float = 1.0,
+                 geom_weight: float = 0.0,
                  **kwargs):
         super().__init__()
+        
         self.input_elevation = None
         self.input_rgb_packed_float = None
         
         print("Initializing InferenceHandler...")
         model_path = "/media/slsecret/T7/carla3/runs/all357_cnn/checkpoint_best.pt"
-        self.handler = InferenceHandler(model_path=model_path, device='cuda', cell_n=cell_n)
+        # model_path = "/media/slsecret/T7/carla3/runs/all357_unet/checkpoint_best.pt"
+        
+        self.handler = InferenceHandler(
+            model_path=model_path, 
+            device='cuda', 
+            cell_n=cell_n,
+            rgb_weight=rgb_weight,
+            geom_weight=geom_weight
+        )
         print("MultiOutputPlugin with InferenceHandler Initialized.")
 
     def _get_layer_index(self, layer_names: List[str], target_name: str) -> int:
@@ -33,12 +45,12 @@ class MultiOutputPlugin(PluginBase):
         **kwargs,
     ) -> cp.ndarray:
         
-        layer_name = kwargs['layer_name']
+        layer_name = kwargs['layer_name'] 
         
         rgb_idx = self._get_layer_index(semantic_layer_names, "rgb")
         if rgb_idx == -1:
             print(f"Warning: Input layer 'rgb' not found. Returning empty buffer for '{layer_name}'.")
-            return self.handler.processed_elevation_buffer
+            return cp.zeros_like(elevation_map[0])
 
         time_idx = self._get_layer_index(layer_names, "time")
         current_map_time = cp.max(elevation_map[time_idx]) if time_idx != -1 else 0
@@ -56,12 +68,19 @@ class MultiOutputPlugin(PluginBase):
         # max_val_buf = cp.max(self.handler.processed_elevation_buffer)
         # avg_val_buf = cp.mean(self.handler.processed_elevation_buffer)
         # median_val_buf = cp.median(self.handler.processed_elevation_buffer)
-        # print(f"Processed Elevation Buffer: min={min_val_buf:.4f}, max={max_val_buf:.4f}, avg={avg_val_buf:.4f}, median={median_val_buf:.4f}")
+        # print(f"[{layer_name}] Processed Elevation Buffer: min={min_val_buf:.4f}, max={max_val_buf:.4f}, avg={avg_val_buf:.4f}, median={median_val_buf:.4f}")
 
         if layer_name == "elevation2":
             return self.handler.processed_elevation_buffer
+            
         elif layer_name == "rgb2":
             return self.handler.processed_rgb_buffer
+        elif layer_name == "traversability2":
+            return self.handler.processed_geom_traversability_buffer
+        elif layer_name == "rgb_traversability":
+            return self.handler.processed_rgb_traversability_buffer
+        elif layer_name == "combined_cost":
+            return self.handler.processed_combined_cost_buffer
         else:
             print(f"Warning: Requested unknown layer '{layer_name}'. Returning empty buffer.")
             return cp.zeros_like(elevation_map[0])

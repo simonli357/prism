@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import torch
+import torch.nn as nn
 import numpy as np
 import cupy as cp
 from collections import deque
 import os
-from typing import Tuple
+from typing import Tuple, Optional
 import torch.nn.functional as F
 import torch.utils.dlpack as dlpack
 import cv2 
@@ -14,7 +15,107 @@ import cv2
 from .unet_conv_lstm import UNetConvLSTM
 from .deeplabv3plus import DeepLabV3Plus
 from .cnn import CNNCorrectionNetSingle
-from .color_mapping import color28_to_onehot14, onehot14_to_color, SEM_CHANNELS, onehot14_to_traversability, color14_to_onehot14, debug_print_old_class_counts, debug_print_new_class_counts
+from .color_mapping import (
+    color28_to_onehot14, onehot14_to_color, SEM_CHANNELS, 
+    onehot14_to_traversability, color14_to_onehot14, 
+    debug_print_old_class_counts, debug_print_new_class_counts
+)
+
+def _default_weights() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Create sensible default weights that match the expected shapes:
+      conv1: (4, 1, 3, 3)  dilation=1
+      conv2: (4, 1, 3, 3)  dilation=2 (same kernel size/shape)
+      conv3: (4, 1, 3, 3)  dilation=3 (same kernel size/shape)
+      conv_out: (1, 12, 1, 1)
+    """
+    # Basic 3x3 kernels: blur + Sobel-like edges + Laplacian-ish
+    blur = np.array([[1, 2, 1],
+                     [2, 4, 2],
+                     [1, 2, 1]], dtype=np.float32)
+    blur = blur / blur.sum()
+
+    sobel_x = np.array([[-1, 0, 1],
+                        [-2, 0, 2],
+                        [-1, 0, 1]], dtype=np.float32)
+
+    sobel_y = sobel_x.T
+
+    lap = np.array([[0,  1, 0],
+                    [1, -4, 1],
+                    [0,  1, 0]], dtype=np.float32)
+
+    # Stack four 3x3 filters -> (4, 1, 3, 3)
+    kset = np.stack([blur, sobel_x, sobel_y, lap], axis=0)[:, None, :, :]  # (4,1,3,3)
+
+    w1 = kset.copy().astype(np.float32)          # (4,1,3,3)
+    w2 = kset.copy().astype(np.float32)          # (4,1,3,3)
+    w3 = kset.copy().astype(np.float32)          # (4,1,3,3)
+
+    # 12 input channels -> 1 output via 1x1 conv; start as equal-weight average
+    w_out = np.ones((1, 12, 1, 1), dtype=np.float32) / 12.0
+
+    return w1, w2, w3, w_out
+
+
+class TraversabilityFilter(nn.Module):
+    def __init__(self, w1, w2, w3, w_out, device="cuda", use_bias=False):
+        super().__init__()
+        print("TraversabilityFilter device", device)
+        self.conv1 = nn.Conv2d(1, 4, 3, dilation=1, padding=0, bias=use_bias)
+        self.conv2 = nn.Conv2d(1, 4, 3, dilation=2, padding=0, bias=use_bias)
+        self.conv3 = nn.Conv2d(1, 4, 3, dilation=3, padding=0, bias=use_bias)
+        self.conv_out = nn.Conv2d(12, 1, 1, bias=use_bias)
+
+        self.conv1.weight = nn.Parameter(torch.from_numpy(w1).float())
+        self.conv2.weight = nn.Parameter(torch.from_numpy(w2).float())
+        self.conv3.weight = nn.Parameter(torch.from_numpy(w3).float())
+        self.conv_out.weight = nn.Parameter(torch.from_numpy(w_out).float())
+
+        if use_bias:
+            nn.init.zeros_(self.conv1.bias)
+            nn.init.zeros_(self.conv2.bias)
+            nn.init.zeros_(self.conv3.bias)
+            nn.init.zeros_(self.conv_out.bias)
+
+    def forward(self, elevation_cupy: cp.ndarray) -> cp.ndarray:
+        elevation_cupy = elevation_cupy.astype(cp.float32)
+        
+        # Note: We must use the device the filter's weights are on
+        elevation = torch.as_tensor(elevation_cupy, device=self.conv1.weight.device)
+
+        with torch.no_grad():
+            x = elevation.view(1, 1, elevation.shape[0], elevation.shape[1])
+            out1 = self.conv1(x)                       # (1,4,H-2,W-2)
+            out2 = self.conv2(x)                       # (1,4,H-4,W-4)
+            out3 = self.conv3(x)                       # (1,4,H-6,W-6)
+
+            out1 = out1[:, :, 2:-2, 2:-2]              # -> (1,4,H-6,W-6)
+            out2 = out2[:, :, 1:-1, 1:-1]              # -> (1,4,H-6,W-6)
+
+            feats = torch.cat((out1, out2, out3), dim=1)  # (1,12,H-6,W-6)
+
+            y = self.conv_out(feats.abs())             # (1,1,H-6,W-6)
+            y = torch.exp(-y)                          # higher = more traversable
+
+            out_cupy = cp.asarray(y)
+
+        return out_cupy  # (1,1,H-6,W-6)
+
+def get_filter_torch(
+    w1: np.ndarray,
+    w2: np.ndarray,
+    w3: np.ndarray,
+    w_out: np.ndarray,
+    device: str = "cuda",
+    use_bias: bool = False,
+):
+    filt = TraversabilityFilter(w1, w2, w3, w_out, device=device, use_bias=use_bias)
+    if device.startswith("cuda"):
+        filt = filt.cuda().eval()
+    else:
+        filt = filt.cpu().eval()
+    return filt
 
 def unpack_rgb_from_float_cp(f_rgb: cp.ndarray) -> cp.ndarray:
     if f_rgb.dtype != cp.float32:
@@ -41,6 +142,7 @@ def pack_rgb_to_float_torch(rgb_uint8_tensor: torch.Tensor) -> torch.Tensor:
     bytes4[..., 2] = rgb_uint8_tensor[..., 0]  # Red
     
     return bytes4.view(torch.float32).squeeze(-1)
+
 def pack_rgb_to_float_np(rgb_uint8: np.ndarray) -> np.ndarray:
     if rgb_uint8.ndim != 3 or rgb_uint8.shape[2] != 3:
         raise ValueError("Input must be a HxWx3 NumPy array.")
@@ -66,7 +168,14 @@ class InferenceHandler:
             print("Returning existing InferenceHandler instance...")
         return cls._instance
     
-    def __init__(self, model_path: str, device: str = 'cuda', cell_n: int = 302):
+    def __init__(self, model_path: str, device: str = 'cuda', cell_n: int = 302, fps: float = 30.0,
+                 rgb_weight: float = 1.0, geom_weight: float = 0.0,
+                 use_trav_filter_bias: bool = False,
+                 w1: Optional[np.ndarray] = None,
+                 w2: Optional[np.ndarray] = None,
+                 w3: Optional[np.ndarray] = None,
+                 w_out: Optional[np.ndarray] = None):
+        
         if self._initialized:
             return
         
@@ -108,12 +217,31 @@ class InferenceHandler:
         buffer_size = 302 
         if cell_n != buffer_size:
              print(f"Warning: Plugin cell_n ({cell_n}) does not match hardcoded model output ({buffer_size}). This may fail if sizes are not compatible.")
-             # We will use the model's output size for the buffer regardless
              
         self.processed_elevation_buffer = cp.zeros((buffer_size, buffer_size), dtype=cp.float32)
         self.processed_rgb_buffer = cp.zeros((buffer_size, buffer_size), dtype=cp.float32)
         self.processed_rgb_traversability_buffer = cp.zeros((buffer_size, buffer_size), dtype=cp.float32)
+        self.processed_geom_traversability_buffer = cp.zeros((buffer_size, buffer_size), dtype=cp.float32)
+        self.processed_combined_cost_buffer = cp.zeros((buffer_size, buffer_size), dtype=cp.float32)
+
         self.last_update_time = -1.0
+        self.fps = fps
+        self.min_time_elapsed = 1.0 / self.fps
+        
+        self.rgb_weight = float(rgb_weight)
+        self.geom_weight = float(geom_weight)
+        
+        if any(w is None for w in (w1, w2, w3, w_out)):
+            w1d, w2d, w3d, w_outd = _default_weights()
+            w1 = w1 if w1 is not None else w1d
+            w2 = w2 if w2 is not None else w2d
+            w3 = w3 if w3 is not None else w3d
+            w_out = w_out if w_out is not None else w_outd
+            
+        self.traversability_filter = get_filter_torch(
+            w1=w1, w2=w2, w3=w3, w_out=w_out, device=device, use_bias=use_trav_filter_bias
+        )
+        print(f"Traversability filter and all buffers initialized. Weights: RGB={self.rgb_weight}, Geom={self.geom_weight}")
         
         self._initialized = True
 
@@ -165,14 +293,12 @@ class InferenceHandler:
         with torch.no_grad():
             output_tensor = self.model(input_tensor).squeeze(0) # Shape: [C_out, H, W]
 
-        sem_logits_tensor = output_tensor[:SEM_CHANNELS]
-        pred_elev_tensor = output_tensor[SEM_CHANNELS].clamp(min=0)  # already linear
-        sem_indices_tensor = torch.argmax(sem_logits_tensor, dim=0)
+        pred_elev_tensor = output_tensor[SEM_CHANNELS].clamp(min=0)  # (300, 300)
         
-        pred_rgb_uint8_tensor = onehot14_to_color(sem_indices_tensor) # [300, 300, 3]
-        # debug_print_old_class_counts(pred_rgb_uint8_tensor)
-
-        pred_rgb_float_tensor = pack_rgb_to_float_torch(pred_rgb_uint8_tensor)
+        sem_logits_tensor = output_tensor[:SEM_CHANNELS]
+        sem_indices_tensor = torch.argmax(sem_logits_tensor, dim=0)
+        pred_rgb_uint8_tensor = onehot14_to_color(sem_indices_tensor) # (300, 300, 3)
+        pred_rgb_float_tensor = pack_rgb_to_float_torch(pred_rgb_uint8_tensor) # (300, 300)
         
         padding = (1, 1, 1, 1)
         padded_rgb_tensor = F.pad(pred_rgb_float_tensor, pad=padding, mode='constant', value=0)
@@ -180,9 +306,23 @@ class InferenceHandler:
         
         self.processed_rgb_buffer[...] = cp.asarray(padded_rgb_tensor)
         self.processed_elevation_buffer[...] = cp.asarray(padded_elev_tensor)
+        
+        inner_geom_trav_cu = self.traversability_filter.forward(self.processed_elevation_buffer)
+        inner_geom_trav_cu = inner_geom_trav_cu.reshape(inner_geom_trav_cu.shape[-2], inner_geom_trav_cu.shape[-1])
+        
+        H, W = self.processed_elevation_buffer.shape
+        geom_trav_full_cp = cp.ones((H, W), dtype=cp.float32)
+        geom_trav_full_cp[3:-3, 3:-3] = inner_geom_trav_cu
+        self.processed_geom_traversability_buffer[...] = geom_trav_full_cp
+
         self.processed_rgb_traversability_buffer[...] = onehot14_to_traversability(self.processed_rgb_buffer)
+        
+        cp.multiply(self.processed_geom_traversability_buffer, self.geom_weight, 
+                    out=self.processed_combined_cost_buffer)
+        
+        self.processed_combined_cost_buffer += (self.processed_rgb_traversability_buffer * self.rgb_weight)
 
     def run_inference(self, current_time: float, rgb_layer_cp: cp.ndarray, elevation_layer_cp: cp.ndarray):
-        if current_time > self.last_update_time:
+        if (current_time - self.last_update_time) >= self.min_time_elapsed:
             self._run_computation(rgb_layer_cp, elevation_layer_cp)
             self.last_update_time = current_time
