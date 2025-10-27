@@ -1,0 +1,15 @@
+<launch>
+  <!-- Choose cost mode: "terrain", "elevation", "fused", or "auto" -->
+  <arg name="cost_mode" default="elevation" />
+
+  <!-- Weighting factors for fused cost mode -->
+  <arg name="w_terrain" default="0.5" />
+  <arg name="w_elevation" default="0.5" />
+
+  <!-- Start the planner node -->
+  <node name="planner" pkg="planning" type="planner" output="screen">
+    <param name="cost_mode" value="$(arg cost_mode)" />
+    <param name="w_terrain" value="$(arg w_terrain)" />
+    <param name="w_elevation" value="$(arg w_elevation)" />
+  </node>
+</launch>

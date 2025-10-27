@@ -1,0 +1,12 @@
+ros_topics:
+  inputs:
+    front: "/carla/ego_vehicle/camera_front/image"
+    left: "/carla/ego_vehicle/camera_left/image"
+    rear: "/carla/ego_vehicle/camera_rear/image"
+    right: "/carla/ego_vehicle/camera_right/image"
+
+  outputs:
+    front: "/carla/ego_vehicle/segmentation_front"
+    left: "/carla/ego_vehicle/segmentation_left"
+    rear: "/carla/ego_vehicle/segmentation_rear"
+    right: "/carla/ego_vehicle/segmentation_right"

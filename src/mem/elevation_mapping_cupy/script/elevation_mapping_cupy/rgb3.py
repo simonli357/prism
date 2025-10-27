@@ -5,6 +5,10 @@ from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
 import message_filters
+try:
+    from .plugins.custom.color_mapping import color28_to_color14, debug_print_new_class_counts, debug_print_old_class_counts
+except:
+    from plugins.custom.color_mapping import color28_to_color14, debug_print_new_class_counts, debug_print_old_class_counts
 
 BRIDGE = CvBridge()
 
@@ -156,21 +160,32 @@ def to_rgb(img, enc_lower: str):
 
 
 class RGB8Relay(object):
-    def __init__(self, in_topic: str, out_topic: str, q: int = 1):
+    def __init__(self, in_topic: str, out_topic: str, q: int = 1, apply_color_mapping: bool = False):
         self.in_topic = in_topic
         self.out_topic = out_topic
+        self.apply_mapping = apply_color_mapping # Store the flag
         self.pub = rospy.Publisher(self.out_topic, Image, queue_size=q)
         self.sub = rospy.Subscriber(self.in_topic, Image, self.cb,
                                     queue_size=q, buff_size=2**24)
-        rospy.loginfo("RGB8Relay: %s -> %s", self.in_topic, self.out_topic)
+        rospy.loginfo("RGB8Relay: %s -> %s (Mapping: %s)",
+                      self.in_topic, self.out_topic, self.apply_mapping)
 
     def cb(self, msg: Image):
-        enc_lower = (msg.encoding or "").lower()
-        img = BRIDGE.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-        rgb = to_rgb(img, enc_lower)
-        out = BRIDGE.cv2_to_imgmsg(rgb, encoding="rgb8")
-        out.header = msg.header
-        self.pub.publish(out)
+        try:
+            enc_lower = (msg.encoding or "").lower()
+            img = BRIDGE.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+
+            rgb = to_rgb(img, enc_lower)
+            # debug_print_old_class_counts(rgb)
+            if self.apply_mapping:
+                rgb = color28_to_color14(rgb)
+                # debug_print_new_class_counts(rgb)
+            out = BRIDGE.cv2_to_imgmsg(rgb, encoding="rgb8")
+            out.header = msg.header
+            self.pub.publish(out)
+        except (CvBridgeError, Exception) as e:
+            # Added a try/except block for robustness, especially for the mapping function
+            rospy.logerr(f"RGB8Relay CB Error for '{self.in_topic}': {e}")
 
 
 def make_pairs():
@@ -222,8 +237,19 @@ if __name__ == "__main__":
     else:
         pairs = make_pairs()
     
+    semantic_topics_to_map = [
+        "/carla/ego_vehicle/semantic_camera_front/image",
+        "/carla/ego_vehicle/semantic_camera_left/image",
+        "/carla/ego_vehicle/semantic_camera_rear/image",
+        "/carla/ego_vehicle/semantic_camera_right/image",
+    ]
+
     # Create the RGB relay converters
-    relays = [RGB8Relay(inp, out) for inp, out in pairs]
+    relays = []
+    for inp, out in pairs:
+        apply_mapping = (inp in semantic_topics_to_map)
+        relays.append(RGB8Relay(inp, out, apply_color_mapping=apply_mapping))
+    
     
     rospy.loginfo("Started %d RGB converters, %d Depth Mask processors, and the BEV Processor.",
                   len(relays), len(mask_processors))

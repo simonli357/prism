@@ -1,4 +1,5 @@
 src/vision_opencv
+__pycache__
 
 *.pyc
 *.bkp

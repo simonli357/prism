@@ -152,4 +152,9 @@ class Traversability2(PluginBase):
         traversability = cp.ones_like(elev, dtype=cp.float32)
         traversability[3:-3, 3:-3] = inner
 
+        # min_val = cp.min(traversability)
+        # max_val = cp.max(traversability)
+        # avg_val = cp.mean(traversability)
+        # median_val = cp.median(traversability)
+        # print(f"Traversability2 Plugin: min={min_val:.4f}, max={max_val:.4f}, avg={avg_val:.4f}, median={median_val:.4f}")
         return traversability

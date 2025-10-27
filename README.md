@@ -2,6 +2,13 @@
 
 ## Overview
 
+## dependencies
+opencv 4.9
+CUDA 11.8
+ROS Noetic
+Python 3.8
+mem (see src/mem/README.md for details)
+
 ## Acknowledgements
 
 This repository incorporates third-party code from the following open-source projects:

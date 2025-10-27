@@ -9,11 +9,12 @@ import os
 from typing import Tuple
 import torch.nn.functional as F
 import torch.utils.dlpack as dlpack
+import cv2 
 
 from .unet_conv_lstm import UNetConvLSTM
 from .deeplabv3plus import DeepLabV3Plus
 from .cnn import CNNCorrectionNetSingle
-from .color_mapping import color28_to_onehot14, onehot14_to_color, SEM_CHANNELS, onehot14_to_traversability
+from .color_mapping import color28_to_onehot14, onehot14_to_color, SEM_CHANNELS, onehot14_to_traversability, color14_to_onehot14, debug_print_old_class_counts, debug_print_new_class_counts
 
 def unpack_rgb_from_float_cp(f_rgb: cp.ndarray) -> cp.ndarray:
     if f_rgb.dtype != cp.float32:
@@ -54,7 +55,21 @@ def pack_rgb_to_float_np(rgb_uint8: np.ndarray) -> np.ndarray:
     return bytes4.view(np.float32).squeeze()
 
 class InferenceHandler:
-    def __init__(self, model_path: str, device: str = 'cuda'):
+    _instance = None
+    
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            print("Creating new InferenceHandler instance...")
+            cls._instance = super(InferenceHandler, cls).__new__(cls)
+            cls._instance._initialized = False
+        else:
+            print("Returning existing InferenceHandler instance...")
+        return cls._instance
+    
+    def __init__(self, model_path: str, device: str = 'cuda', cell_n: int = 302):
+        if self._initialized:
+            return
+        
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         print(f"Using device: {self.device}")
 
@@ -89,15 +104,35 @@ class InferenceHandler:
         self.history = deque(maxlen=self.seq_len)
         print("Model loaded and ready for inference.")
 
+        # Based on 300x300 crop + (1,1,1,1) padding
+        buffer_size = 302 
+        if cell_n != buffer_size:
+             print(f"Warning: Plugin cell_n ({cell_n}) does not match hardcoded model output ({buffer_size}). This may fail if sizes are not compatible.")
+             # We will use the model's output size for the buffer regardless
+             
+        self.processed_elevation_buffer = cp.zeros((buffer_size, buffer_size), dtype=cp.float32)
+        self.processed_rgb_buffer = cp.zeros((buffer_size, buffer_size), dtype=cp.float32)
+        self.processed_rgb_traversability_buffer = cp.zeros((buffer_size, buffer_size), dtype=cp.float32)
+        self.last_update_time = -1.0
+        
+        self._initialized = True
+
     def _preprocess_frame(self, rgb_layer_cp: cp.ndarray, elevation_layer_cp: cp.ndarray) -> torch.Tensor:
-        # 1. Crop (on GPU with CuPy)
         y0, x0 = (rgb_layer_cp.shape[0] - 300) // 2, (rgb_layer_cp.shape[1] - 300) // 2
         rgb_cp = rgb_layer_cp[y0:y0+300, x0:x0+300]
         elev_cp = elevation_layer_cp[y0:y0+300, x0:x0+300]
         
-        # 2. Unpack RGB and get one-hot semantics (on GPU with CuPy)
         rgb_img_cp = unpack_rgb_from_float_cp(rgb_cp) # Now a (300, 300, 3) uint8 CuPy array
-        sem_onehot_cp = color28_to_onehot14(rgb_img_cp, dtype=cp.float32) # Stays on GPU
+
+        # DEBUG
+        # rgb_img_np = rgb_img_cp.get() 
+        # bgr_img_np = cv2.cvtColor(rgb_img_np, cv2.COLOR_RGB2BGR)
+        # cv2.imshow("Input Frame", bgr_img_np)
+        # cv2.waitKey(1) # Wait 1ms to allow the window to update
+        # debug_print_old_class_counts(rgb_img_cp)
+        
+        # sem_onehot_cp = color28_to_onehot14(rgb_img_cp, dtype=cp.float32) # Stays on GPU
+        sem_onehot_cp = color14_to_onehot14(rgb_img_cp, dtype=cp.float32) # Stays on GPU
         
         # 3. Process elevation (on GPU with CuPy)
         mask_cp = cp.isfinite(elev_cp).astype(cp.float32)
@@ -116,7 +151,7 @@ class InferenceHandler:
         # frame_tensor = dlpack.from_dlpack(frame_features_cp.toDlpack()).to(self.device)
         return frame_tensor.permute(2, 0, 1) # [C_in, 300, 300]
 
-    def run_inference(self, rgb_layer_cp: cp.ndarray, elevation_layer_cp: cp.ndarray) -> Tuple[cp.ndarray, cp.ndarray]:
+    def _run_computation(self, rgb_layer_cp: cp.ndarray, elevation_layer_cp: cp.ndarray):
         frame_tensor = self._preprocess_frame(rgb_layer_cp, elevation_layer_cp) # [C, H, W]
         self.history.append(frame_tensor)
         if len(self.history) < self.seq_len:
@@ -135,16 +170,19 @@ class InferenceHandler:
         sem_indices_tensor = torch.argmax(sem_logits_tensor, dim=0)
         
         pred_rgb_uint8_tensor = onehot14_to_color(sem_indices_tensor) # [300, 300, 3]
-        
+        # debug_print_old_class_counts(pred_rgb_uint8_tensor)
+
         pred_rgb_float_tensor = pack_rgb_to_float_torch(pred_rgb_uint8_tensor)
         
         padding = (1, 1, 1, 1)
         padded_rgb_tensor = F.pad(pred_rgb_float_tensor, pad=padding, mode='constant', value=0)
         padded_elev_tensor = F.pad(pred_elev_tensor, pad=padding, mode='constant', value=0)
         
-        final_rgb_cp = cp.asarray(padded_rgb_tensor)
-        final_elev_cp = cp.asarray(padded_elev_tensor)
-        # final_rgb_trav_cp = onehot14_to_traversability(final_rgb_cp)
+        self.processed_rgb_buffer[...] = cp.asarray(padded_rgb_tensor)
+        self.processed_elevation_buffer[...] = cp.asarray(padded_elev_tensor)
+        self.processed_rgb_traversability_buffer[...] = onehot14_to_traversability(self.processed_rgb_buffer)
 
-        # return final_rgb_cp, final_elev_cp, final_rgb_trav_cp
-        return final_rgb_cp, final_elev_cp, None
+    def run_inference(self, current_time: float, rgb_layer_cp: cp.ndarray, elevation_layer_cp: cp.ndarray):
+        if current_time > self.last_update_time:
+            self._run_computation(rgb_layer_cp, elevation_layer_cp)
+            self.last_update_time = current_time

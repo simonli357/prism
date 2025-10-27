@@ -19,7 +19,8 @@ ORIG = [
     (4, "Wall", (102, 102, 156)), (5, "Fence", (190, 153, 153)),
     (6, "Pole", (153, 153, 153)), (7, "TrafficLight", (250, 170, 30)),
     (8, "TrafficSign", (220, 220, 0)), (9, "Vegetation", (107, 142, 35)),
-    (10, "Terrain", (152, 251, 152)), (11, "Sky", (70, 130, 180)),
+    # (10, "Terrain", (152, 251, 152)), (11, "Sky", (70, 130, 180)),
+    (10, "Terrain", (145, 170, 100)), (11, "Sky", (70, 130, 180)),
     (12, "Pedestrian", (220, 20, 60)), (13, "Rider", (255, 0, 0)),
     (14, "Car", (0, 0, 142)), (15, "Truck", (0, 0, 70)),
     (16, "Bus", (0, 60, 100)), (17, "Train", (0, 80, 100)),
@@ -27,7 +28,8 @@ ORIG = [
     (20, "Static", (110, 190, 160)), (21, "Dynamic", (170, 120, 50)),
     (22, "Other", (55, 90, 80)), (23, "Water", (45, 60, 150)),
     (24, "RoadLine", (157, 234, 50)), (25, "Ground", (81, 0, 81)),
-    (26, "Bridge", (150, 100, 100)), (27, "RailTrack", (230, 150, 140)),
+    # (26, "Bridge", (150, 100, 100)), (27, "RailTrack", (230, 150, 140)),
+    (26, "Bridge", (150, 100, 100)), (27, "RailTrack", (100, 40, 40)),
     (28, "GuardRail", (180, 165, 180)),
 ]
 
@@ -77,7 +79,8 @@ NEW_PALETTE = np.array([
     (180, 165, 180),   # 4 Barrier
     (220, 220, 0),     # 5 PoleSign
     (107, 142, 35),    # 6 Vegetation
-    (152, 251, 152),   # 7 Terrain
+    # (152, 251, 152),   # 7 Terrain
+    (145, 170, 100),   # 7 Terrain
     (220, 20,  60),    # 8 Person
     (119, 11,  32),    # 9 TwoWheeler
     (0,   0,   142),   # 10 Vehicle
@@ -98,6 +101,10 @@ ORIG_TO_NEW_LUT = np.zeros(29, dtype=np.int32)
 # --- Unlabeled stays Unlabeled ---
 ORIG_TO_NEW_LUT[0] = 0
 
+NEW_RGB_TO_ID_LUT = np.full((256, 256, 256), -1, dtype=np.int32)
+for class_id, (r, g, b) in enumerate(NEW_PALETTE):
+    NEW_RGB_TO_ID_LUT[r, g, b] = class_id
+    
 # --- Roads group (Roads, RoadLine) -> Roads (1)
 for k in [1, 24]:
     ORIG_TO_NEW_LUT[k] = 1
@@ -146,9 +153,9 @@ ORIG_TO_NEW_LUT[23] = 11
 for k in [22]:
     ORIG_TO_NEW_LUT[k] = 0
 
-# --- Dynamic -> Person (8)
+# --- Dynamic -> Structure (3)
 for k in [21]:
-    ORIG_TO_NEW_LUT[k] = 8
+    ORIG_TO_NEW_LUT[k] = 3
     
 # --- Static, RailTrack -> Structure (3)
 for k in [20, 27]:
@@ -240,6 +247,41 @@ def color28_to_onehot(rgb_img, dtype=np.float32):
         eye = backend.eye(num_classes, dtype=dtype)
         return eye[new_ids]
 
+def _new_rgb_image_to_new_ids(rgb_img):
+    """Convert NEW 12-class RGB color image (H,W,3) -> new IDs (H,W)."""
+    backend, device = _get_backend_and_device(rgb_img)
+    rgb_img = _ensure_rgb_uint8(rgb_img, backend)
+    # Use the new LUT we just defined
+    lut = _get_lut('NEW_RGB_TO_ID_LUT', backend, device) 
+
+    if backend == torch:
+        r = rgb_img[..., 0].to(torch.long)
+        g = rgb_img[..., 1].to(torch.long)
+        b = rgb_img[..., 2].to(torch.long)
+        return lut[r, g, b]
+    else:
+        return lut[rgb_img[..., 0], rgb_img[..., 1], rgb_img[..., 2]]
+
+
+def color14_to_onehot(rgb_img, dtype=np.float32):
+    """
+    RGB (NEW 12-class palette) -> one-hot (H,W,SEM_CHANNELS) on same device.
+    """
+    backend, device = _get_backend_and_device(rgb_img)
+    # Use the new helper function
+    new_ids = _new_rgb_image_to_new_ids(rgb_img) 
+
+    num_classes = SEM_CHANNELS
+    if backend == torch:
+        # Handle -1 (unknown) pixels by mapping them to class 0
+        new_ids = new_ids.clamp(min=0) 
+        return torch.nn.functional.one_hot(new_ids.long(), num_classes).to(dtype)
+    else:
+        # Handle -1 (unknown) pixels by mapping them to class 0
+        new_ids[new_ids < 0] = 0 
+        eye = backend.eye(num_classes, dtype=dtype)
+        return eye[new_ids]
+    
 def onehot_to_color(onehot):
     """
 
@@ -320,3 +362,160 @@ def color28_to_color14(rgb_img):
 
 def onehot14_to_traversability(semantic_map):
     return onehot_to_traversability(semantic_map)
+
+def color14_to_onehot14(rgb_img, dtype=np.float32):
+    return color14_to_onehot(rgb_img, dtype=dtype)
+# -------------------------------
+# Debugging Functions
+# -------------------------------
+_NEW_RGB_TO_ID_LUT = None
+def debug_print_new_class_counts(rgb_new_palette_img):
+    """
+    Takes an RGB image (NumPy array) that uses the NEW_PALETTE 
+    and prints the pixel count for each new class (0-11).
+    """
+    global _NEW_RGB_TO_ID_LUT
+    
+    # 1. Create the reverse LUT if it doesn't exist
+    if _NEW_RGB_TO_ID_LUT is None:
+        print("[Debug] Creating NEW_PALETTE reverse LUT...")
+        _NEW_RGB_TO_ID_LUT = np.full((256, 256, 256), -1, dtype=np.int32)
+        for class_id, (r, g, b) in enumerate(NEW_PALETTE):
+            _NEW_RGB_TO_ID_LUT[r, g, b] = class_id
+        print("[Debug] LUT created.")
+
+    # 2. Ensure input is a NumPy array
+    if not isinstance(rgb_new_palette_img, np.ndarray):
+        if hasattr(rgb_new_palette_img, 'get'):
+            rgb_new_palette_img = rgb_new_palette_img.get()
+        elif hasattr(rgb_new_palette_img, 'cpu'):
+            rgb_new_palette_img = rgb_new_palette_img.cpu().numpy()
+            
+    if rgb_new_palette_img.dtype != np.uint8:
+        rgb_new_palette_img = rgb_new_palette_img.astype(np.uint8)
+
+    # 3. Use the LUT to get class IDs for each pixel
+    try:
+        r, g, b = rgb_new_palette_img[..., 0], rgb_new_palette_img[..., 1], rgb_new_palette_img[..., 2]
+        new_ids = _NEW_RGB_TO_ID_LUT[r, g, b]
+    except IndexError:
+        print(f"[Debug] Error: Input image shape {rgb_new_palette_img.shape} or colors don't match NEW_PALETTE.")
+        return
+    except Exception as e:
+        print(f"[Debug] An error occurred during LUT lookup: {e}")
+        return
+
+    # 4. Get unique class IDs and their counts
+    unique_ids, counts = np.unique(new_ids, return_counts=True)
+    count_map = dict(zip(unique_ids, counts))
+
+    # 5. Print the formatted report
+    print("\n--- Pixel Class Count (New 12-Class Map) ---")
+    print(f"{'ID':<3} | {'Class Name':<12} | {'Pixel Count':>15}")
+    print("-" * 35)
+    
+    total_pixels = 0
+    for i, class_name in enumerate(NEW_CLASSES):
+        count = count_map.get(i, 0)
+        print(f"{i:<3} | {class_name:<12} | {count:>15,}")
+        total_pixels += count
+        
+    if -1 in count_map:
+        unknown_count = count_map[-1]
+        print(f"{'-1':<3} | {'<UNKNOWN>':<12} | {unknown_count:>15,}")
+        total_pixels += unknown_count
+        
+        # --- ADDED: Find and print unknown color details ---
+        try:
+            unknown_mask = (new_ids == -1)
+            unknown_colors_list = rgb_new_palette_img[unknown_mask]
+            
+            # Find unique (R,G,B) triplets and their counts
+            unique_colors, unique_counts = np.unique(unknown_colors_list, axis=0, return_counts=True)
+            
+            print("  --- Unknown Color Details ---")
+            for color, count in zip(unique_colors, unique_counts):
+                print(f"      - RGB {str(color):<15}: {count:>10,} pixels")
+        except Exception as e:
+            print(f"  [Debug] Error finding unique unknown colors: {e}")
+        # --- END ADDED SECTION ---
+        
+    print("-" * 35)
+    print(f"{'':<18} | {total_pixels:>15,} (Total Pixels)")
+    print("----------------------------------------------\n")
+
+_OLD_RGB_TO_ID_LUT = None
+def debug_print_old_class_counts(rgb_orig_palette_img):
+    """
+    Takes an RGB image (NumPy array) that uses the ORIGINAL 28-class palette 
+    and prints the pixel count for each original class (0-28).
+    """
+    global _OLD_RGB_TO_ID_LUT
+    
+    # 1. Create the reverse LUT if it doesn't exist
+    if _OLD_RGB_TO_ID_LUT is None:
+        print("[Debug] Creating ORIGINAL palette reverse LUT...")
+        _OLD_RGB_TO_ID_LUT = np.full((256, 256, 256), -1, dtype=np.int32)
+        for class_id, _, (r, g, b) in ORIG:
+            _OLD_RGB_TO_ID_LUT[r, g, b] = class_id
+        print("[Debug] LUT created.")
+
+    # 2. Ensure input is a NumPy array
+    if not isinstance(rgb_orig_palette_img, np.ndarray):
+        if hasattr(rgb_orig_palette_img, 'get'):
+            rgb_orig_palette_img = rgb_orig_palette_img.get()
+        elif hasattr(rgb_orig_palette_img, 'cpu'):
+            rgb_orig_palette_img = rgb_orig_palette_img.cpu().numpy()
+            
+    if rgb_orig_palette_img.dtype != np.uint8:
+        rgb_orig_palette_img = rgb_orig_palette_img.astype(np.uint8)
+
+    # 3. Use the LUT to get class IDs for each pixel
+    try:
+        r, g, b = rgb_orig_palette_img[..., 0], rgb_orig_palette_img[..., 1], rgb_orig_palette_img[..., 2]
+        old_ids = _OLD_RGB_TO_ID_LUT[r, g, b]
+    except IndexError:
+        print(f"[Debug] Error: Input image shape {rgb_orig_palette_img.shape} or colors don't match ORIGINAL palette.")
+        return
+    except Exception as e:
+        print(f"[Debug] An error occurred during LUT lookup: {e}")
+        return
+
+    # 4. Get unique class IDs and their counts
+    unique_ids, counts = np.unique(old_ids, return_counts=True)
+    count_map = dict(zip(unique_ids, counts))
+
+    # 5. Print the formatted report
+    print("\n--- Pixel Class Count (Original 28-Class Map) ---")
+    print(f"{'ID':<3} | {'Class Name':<14} | {'Pixel Count':>15}")
+    print("-" * 37)
+    
+    total_pixels = 0
+    for class_id, class_name, _ in ORIG:
+        count = count_map.get(class_id, 0)
+        print(f"{class_id:<3} | {class_name:<14} | {count:>15,}")
+        total_pixels += count
+        
+    if -1 in count_map:
+        unknown_count = count_map[-1]
+        print(f"{'-1':<3} | {'<UNKNOWN>':<14} | {unknown_count:>15,}")
+        total_pixels += unknown_count
+
+        # --- ADDED: Find and print unknown color details ---
+        try:
+            unknown_mask = (old_ids == -1)
+            unknown_colors_list = rgb_orig_palette_img[unknown_mask]
+            
+            # Find unique (R,G,B) triplets and their counts
+            unique_colors, unique_counts = np.unique(unknown_colors_list, axis=0, return_counts=True)
+            
+            print("  --- Unknown Color Details ---")
+            for color, count in zip(unique_colors, unique_counts):
+                print(f"      - RGB {str(color):<15}: {count:>10,} pixels")
+        except Exception as e:
+            print(f"  [Debug] Error finding unique unknown colors: {e}")
+        # --- END ADDED SECTION ---
+
+    print("-" * 37)
+    print(f"{'':<20} | {total_pixels:>15,} (Total Pixels)")
+    print("----------------------------------------------\n")

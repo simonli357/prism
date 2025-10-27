@@ -10,8 +10,8 @@ class CombinedPlugin(PluginBase):
     """
     def __init__(self, 
                  cell_n: int = 300,
-                 rgb_weight: float = 0.5,
-                 geom_weight: float = 0.5,
+                 rgb_weight: float = 1.0,
+                 geom_weight: float = 0.0,
                  **kwargs):
         super().__init__()
         
@@ -60,10 +60,18 @@ class CombinedPlugin(PluginBase):
             print("Warning: CombinedPlugin could not find 'rgb2' input layer.")
             return self.output_buffer 
 
-        # --- Compute the weighted sum ---
-        
         # 1. Get the traversability map from the semantic 'rgb2' layer
+        # min_val = cp.min(rgb_semantic_layer)
+        # max_val = cp.max(rgb_semantic_layer)
+        # avg_val = cp.mean(rgb_semantic_layer)
+        # median_val = cp.median(rgb_semantic_layer)
+        # print(f"CombinedPlugin RGB Semantic Layer: min={min_val:.4f}, max={max_val:.4f}, avg={avg_val:.4f}, median={median_val:.4f}")
         rgb_trav_layer = onehot14_to_traversability(rgb_semantic_layer)
+        # min_val = cp.min(rgb_trav_layer)
+        # max_val = cp.max(rgb_trav_layer)
+        # avg_val = cp.mean(rgb_trav_layer)
+        # median_val = cp.median(rgb_trav_layer)
+        # print(f"CombinedPlugin RGB Traversability: min={min_val:.4f}, max={max_val:.4f}, avg={avg_val:.4f}, median={median_val:.4f}")
 
         # 2. Calculate the first term: (geom_trav * geom_weight)
         #    Store the result directly in the output buffer.

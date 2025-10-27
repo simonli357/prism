@@ -1,0 +1,28 @@
+ros_topics:
+  inputs:
+    alphasense_front_center: "/boxi/alphasense/front_center/image_raw/compressed"
+    # alphasense_front_left: "/boxi/alphasense/front_left/image_raw/compressed"
+    # alphasense_front_right: "/boxi/alphasense/front_right/image_raw/compressed"
+    alphasense_left: "/boxi/alphasense/left/image_raw/compressed"
+    alphasense_right: "/boxi/alphasense/right/image_raw/compressed"
+
+    hdr_front: "/boxi/hdr/front/image_raw/compressed"
+    hdr_left: "/boxi/hdr/left/image_raw/compressed"
+    hdr_right: "/boxi/hdr/right/image_raw/compressed"
+
+    # zed_left: "/boxi/zed2i/left/image_raw/compressed"
+    # zed_right: "/boxi/zed2i/right/image_raw/compressed"
+
+  outputs:
+    alphasense_front_center: "/boxi/segmentation/alphasense_front_center"
+    # alphasense_front_left: "/boxi/segmentation/alphasense_front_left"
+    # alphasense_front_right: "/boxi/segmentation/alphasense_front_right"
+    alphasense_left: "/boxi/segmentation/alphasense_left"
+    alphasense_right: "/boxi/segmentation/alphasense_right"
+
+    hdr_front: "/boxi/segmentation/hdr_front"
+    hdr_left: "/boxi/segmentation/hdr_left"
+    hdr_right: "/boxi/segmentation/hdr_right"
+
+    # zed_left: "/boxi/segmentation/zed_left"
+    # zed_right: "/boxi/segmentation/zed_right"

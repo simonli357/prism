@@ -15,9 +15,6 @@ except ImportError:
     from color_mapping import color28_to_onehot14, color28_to_color14, onehot14_to_color, SEM_CHANNELS
 
 
-# ---------------------------
-# Shard utilities
-# ---------------------------
 def resolve_shards(path_or_pattern: str, recursive: bool = False, only_remapped: bool = False):
     """
     Return a sorted list of .tar shard files.
@@ -40,7 +37,6 @@ def resolve_shards(path_or_pattern: str, recursive: bool = False, only_remapped:
                 candidates = [p for p in candidates if "remapped" in os.path.dirname(p)]
             paths = sorted(candidates)
     else:
-        # pattern case
         paths = sorted(glob.glob(path_or_pattern))
         if only_remapped:
             paths = [p for p in paths if "remapped" in os.path.dirname(p)]
@@ -76,9 +72,6 @@ def parse_key(key: str):
     except Exception: idxi = -1
     return sess, idxi
 
-# --------------------------------
-# WebDataset → sequence dataset
-# --------------------------------
 class SeqFromWDS(IterableDataset):
     def __init__(self, shard_paths: list, seq_len: int = 4,
                  shuffle_shards: bool = True,
@@ -103,17 +96,14 @@ class SeqFromWDS(IterableDataset):
                 continue
             sess, idx = parse_key(key)
 
-            # --- Input semantics (TRAINING side) ---
             if "tr_onehot14.npy" in sample:
                 tr_sem = decode_npy(sample["tr_onehot14.npy"]).astype(np.float32)
             else:
-                # Fallback: build one-hot from 28c color PNG
                 tr_rgb28 = decode_png_rgb(sample["tr_rgb.png"])
                 tr_sem = color28_to_onehot14(tr_rgb28, dtype=np.float32)
             if tr_sem.ndim != 3 or tr_sem.shape[2] != SEM_CHANNELS:
                 raise ValueError(f"tr_sem shape {tr_sem.shape} != (H,W,14)")
 
-            # --- Target semantics (GT side) ---
             if "gt_onehot14.npy" in sample:
                 gt_sem = decode_npy(sample["gt_onehot14.npy"]).astype(np.float32)
             else:
@@ -122,11 +112,9 @@ class SeqFromWDS(IterableDataset):
             if gt_sem.ndim != 3 or gt_sem.shape[2] != SEM_CHANNELS:
                 raise ValueError(f"gt_sem shape {gt_sem.shape} != (H,W,14)")
 
-            # Elevations
             tr_elev = decode_npy(sample["tr_elev.npy"]).astype(np.float32)
             gt_elev = decode_npy(sample["gt_elev.npy"]).astype(np.float32)
 
-            # Masks: training-valid from training elevation; GT-valid from provided or finite(gt_elev)
             tr_mask = np.isfinite(tr_elev).astype(np.float32)
             if "valid.png" in sample:
                 valid_img = cv2.imdecode(np.frombuffer(sample["valid.png"], np.uint8), cv2.IMREAD_GRAYSCALE)
@@ -152,7 +140,6 @@ class SeqFromWDS(IterableDataset):
 
             frames = list(hist[sess])[-self.seq_len:]
 
-            # Build input sequence
             X = []
             for fr in frames:
                 parts = [fr["tr_sem"], fr["tr_elev"][..., None]]
@@ -161,7 +148,6 @@ class SeqFromWDS(IterableDataset):
                 X.append(np.concatenate(parts, axis=-1))
             X = np.stack(X, axis=0)  # [T,H,W,C_in]
 
-            # Target (last frame): onehot14 + elev
             last = frames[-1]
             Mgt = last["gt_mask"].astype(np.float32)
             
