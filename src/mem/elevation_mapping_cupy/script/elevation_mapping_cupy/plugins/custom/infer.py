@@ -169,7 +169,7 @@ class InferenceHandler:
         return cls._instance
     
     def __init__(self, model_path: str, device: str = 'cuda', cell_n: int = 302, fps: float = 30.0,
-                 rgb_weight: float = 1.0, geom_weight: float = 0.0,
+                 rgb_weight: float = 0.50, geom_weight: float = 0.50,
                  use_trav_filter_bias: bool = False,
                  w1: Optional[np.ndarray] = None,
                  w2: Optional[np.ndarray] = None,
@@ -315,7 +315,8 @@ class InferenceHandler:
         geom_trav_full_cp[3:-3, 3:-3] = inner_geom_trav_cu
         self.processed_geom_traversability_buffer[...] = geom_trav_full_cp
 
-        self.processed_rgb_traversability_buffer[...] = onehot14_to_traversability(self.processed_rgb_buffer)
+        padded_indices_tensor = F.pad(sem_indices_tensor, pad=padding, mode='constant', value=0)
+        self.processed_rgb_traversability_buffer[...] = onehot14_to_traversability(cp.asarray(padded_indices_tensor))
         
         cp.multiply(self.processed_geom_traversability_buffer, self.geom_weight, 
                     out=self.processed_combined_cost_buffer)

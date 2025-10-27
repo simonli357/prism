@@ -191,7 +191,7 @@ class PluginManager(object):
         idx = self.get_layer_index_with_name(name)
         if idx is not None and idx < len(self.plugins):
             n_param = len(signature(self.plugins[idx]).parameters)
-            if name == "rgb2" or name == "elevation2":
+            if name == "rgb2" or name == "elevation2" or name == "traversability2" or name == "combined_cost":
                 # print("updating ", name, ", idx=", idx, ", n_param=", n_param)
                 self.layers[idx] = self.plugins[idx](
                     elevation_map,
@@ -247,38 +247,3 @@ class PluginManager(object):
         idx = self.get_layer_index_with_name(name)
         if idx is not None:
             return self.plugin_params[idx]
-
-
-if __name__ == "__main__":
-    print("PLUGIN MANAGER MAIN!!!!")
-    plugins = [
-        PluginParams(name="min_filter", layer_name="min_filter"),
-        PluginParams(name="smooth_filter", layer_name="smooth"),
-    ]
-    extra_params = [
-        {"dilation_size": 5, "iteration_n": 5},
-        {"input_layer_name": "elevation2"},
-    ]
-    manager = PluginManager(200)
-    manager.load_plugin_settings("../config/plugin_config.yaml")
-    print(manager.layer_names)
-    print(manager.plugin_names)
-    elevation_map = cp.zeros((7, 200, 200)).astype(cp.float32)
-    # HEREE
-    layer_names = [
-        "elevation",
-        "variance",
-        "is_valid",
-        "traversability",
-        "time",
-        "upper_bound",
-        "is_upper_bound",
-    ]
-    elevation_map[0] = cp.random.randn(200, 200)
-    elevation_map[2] = cp.abs(cp.random.randn(200, 200))
-    print("map", elevation_map[0])
-    print("layer map ", manager.layers)
-    manager.update_with_name("min_filter", elevation_map, layer_names)
-    manager.update_with_name("smooth_filter", elevation_map, layer_names)
-    # manager.update_with_name("sem_fil", elevation_map, layer_names, semantic_map=semantic_map)
-    print(manager.get_map_with_name("smooth"))

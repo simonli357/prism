@@ -19,6 +19,7 @@ try:
     from .cnn import CNNCorrectionNetSingle
     from .plotter import _read_training_log_csv, _plot_metric, _save_training_plots
     from .evaluate3 import run_inference
+    from .train_utils import *
 except ImportError:
     from unet_conv_lstm import UNetConvLSTM
     from unet_attention import AttentionUNetConvLSTM
