@@ -92,3 +92,14 @@ def sha1_of_file(path, block_size=1<<20):
             if not b: break
             h.update(b)
     return h.hexdigest()
+  
+MODEL_SUFFIX = {
+    "cnn": "_cnn",
+    "unet": "_unet",
+    "unet_attn": "_unet_attention",
+    "deeplabv3p": "_deeplabv3p",
+}
+
+def resolve_out_dir(base_out: str, model_name: str) -> str:
+    suffix = MODEL_SUFFIX.get(model_name, f"_{model_name}")
+    return base_out.rstrip("/") + suffix

@@ -69,8 +69,8 @@ subscribers:
 
 publishers:
   elevation_map_raw:
-    layers: ['rgb', 'elevation', 'traversability', 'min_filter', 'inpaint', 'rgb2', 'elevation2', 'traversability2', 'combined_cost']
-    basic_layers: ['min_filter']
-    # layers: ['rgb', 'elevation', 'min_filter', 'inpaint']
+    # layers: ['rgb', 'elevation', 'traversability', 'min_filter', 'inpaint', 'rgb2', 'elevation2', 'traversability2', 'combined_cost']
     # basic_layers: ['min_filter']
+    layers: ['rgb', 'elevation', 'min_filter', 'inpaint']
+    basic_layers: ['min_filter']
     fps: 10.0

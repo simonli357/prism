@@ -49,35 +49,35 @@ semantic_filter:
     use_height: False                         # if true, use height to select the category. otherwise, use count.
     height_thresh: 0.2                        # if use_height is true, this threshold is used.
     height_diff_thresh: 0.1                   # if use_height is true, this threshold is used.
-elevation2:
-  enable: True
-  type: "example"
-  fill_nan: False
-  is_height_layer: True
-  layer_name: "elevation2"  # This name is passed to the __call__ method
-  extra_params:
-    value: 1.0                           # This is an example parameter
-rgb2:
-  enable: True
-  type: "example"
-  fill_nan: False
-  is_height_layer: False  # RGB is not a height layer
-  layer_name: "rgb2"
-  extra_params:
-    value: 2.0                           # This is an example parameter
-traversability2:
-  enable: True
-  type: "example"
-  fill_nan: False
-  is_height_layer: False
-  layer_name: "traversability2"
-  extra_params:
-    input_layer_name: "elevation2"
-combined_cost:
-  enable: True
-  type: "example"
-  fill_nan: False
-  is_height_layer: False   
-  layer_name: "combined_cost" 
-  extra_params:
-    scale_factor: 0.5    
+# elevation2:
+#   enable: True
+#   type: "example"
+#   fill_nan: False
+#   is_height_layer: True
+#   layer_name: "elevation2"  # This name is passed to the __call__ method
+#   extra_params:
+#     value: 1.0                           # This is an example parameter
+# rgb2:
+#   enable: True
+#   type: "example"
+#   fill_nan: False
+#   is_height_layer: False  # RGB is not a height layer
+#   layer_name: "rgb2"
+#   extra_params:
+#     value: 2.0                           # This is an example parameter
+# traversability2:
+#   enable: True
+#   type: "example"
+#   fill_nan: False
+#   is_height_layer: False
+#   layer_name: "traversability2"
+#   extra_params:
+#     input_layer_name: "elevation2"
+# combined_cost:
+#   enable: True
+#   type: "example"
+#   fill_nan: False
+#   is_height_layer: False   
+#   layer_name: "combined_cost" 
+#   extra_params:
+#     scale_factor: 0.5    

@@ -4,6 +4,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
 
+try:
+    from .color_mapping import SEM_CHANNELS
+except ImportError:
+    from color_mapping import SEM_CHANNELS
+
 class _ASPPConv(nn.Module):
     def __init__(self, in_channels, out_channels, atrous_rate):
         super(_ASPPConv, self).__init__()
@@ -68,6 +73,8 @@ class DeepLabV3Plus(nn.Module):
     def __init__(self, in_ch, out_ch, base=32):
         super(DeepLabV3Plus, self).__init__()
         
+        assert out_ch == SEM_CHANNELS + 1, "This modification expects out_ch = SEM_CHANNELS + 1"
+
         backbone = models.resnet50(pretrained=False, replace_stride_with_dilation=[False, True, True])
         
         self.backbone_conv1 = nn.Conv2d(in_ch, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -104,43 +111,60 @@ class DeepLabV3Plus(nn.Module):
             nn.Dropout(0.1)
         )
         
-        self.final_conv = nn.Conv2d(256, out_ch, kernel_size=1)
+        self.final_conv = nn.Conv2d(256, SEM_CHANNELS, kernel_size=1)
+
+        self.elev_head = nn.Conv2d(256, 1, kernel_size=1)
+        # Initialize elevation head to output zeros (zero correction)
+        nn.init.zeros_(self.elev_head.weight)
+        nn.init.zeros_(self.elev_head.bias)
 
         self._initialize_weights()
 
     def forward(self, x):
-        x_last_frame = x[:, -1, :, :, :]
-
+        # x is [B, T, C, H, W]
+        x_last_frame = x[:, -1, :, :, :] # [B, C, H, W]
         input_size = x_last_frame.shape[-2:]
         
+        # Assumes elevation is the channel directly after semantics
+        elev_in = x_last_frame[:, SEM_CHANNELS:SEM_CHANNELS+1]
+
+        # --- Backbone ---
         features = self.backbone_conv1(x_last_frame)
         features = self.backbone_bn1(features)
         features = self.backbone_relu(features)
         features = self.backbone_maxpool(features)
         
-        low_level_features = self.backbone_layer1(features)
+        low_level_features = self.backbone_layer1(features) # [B, 256, H/4, W/4]
         features = self.backbone_layer2(low_level_features)
         features = self.backbone_layer3(features)
-        features = self.backbone_layer4(features)
+        features = self.backbone_layer4(features) # [B, 2048, H/16, W/16]
         
-        high_level_features = self.aspp(features)
+        high_level_features = self.aspp(features) # [B, 256, H/16, W/16]
         
+        # --- Decoder ---
         high_level_features_up = F.interpolate(high_level_features, size=low_level_features.shape[-2:], mode='bilinear', align_corners=False)
         low_level_features_proc = self.low_level_conv(low_level_features)
         
         concat_features = torch.cat([high_level_features_up, low_level_features_proc], dim=1)
-        refined_features = self.decoder_conv(concat_features)
+        refined_features = self.decoder_conv(concat_features) # [B, 256, H/4, W/4]
         
-        final_logits = self.final_conv(refined_features)
+        sem_logits_lowres = self.final_conv(refined_features)
+        d_elev_lowres = self.elev_head(refined_features)
         
-        output = F.interpolate(final_logits, size=input_size, mode='bilinear', align_corners=False)
+        sem_logits = F.interpolate(sem_logits_lowres, size=input_size, mode='bilinear', align_corners=False)
+        d_elev = F.interpolate(d_elev_lowres, size=input_size, mode='bilinear', align_corners=False)
+        
+        elev_out = elev_in + d_elev
+        
+        output = torch.cat([sem_logits, elev_out], dim=1)
         
         return output
 
     def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m is not self.elev_head:
+                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)

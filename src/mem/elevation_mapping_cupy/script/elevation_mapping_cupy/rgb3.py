@@ -177,7 +177,8 @@ class RGB8Relay(object):
 
             rgb = to_rgb(img, enc_lower)
             # debug_print_old_class_counts(rgb)
-            if self.apply_mapping:
+            # if self.apply_mapping:
+            if False:
                 rgb = color28_to_color14(rgb)
                 # debug_print_new_class_counts(rgb)
             out = BRIDGE.cv2_to_imgmsg(rgb, encoding="rgb8")

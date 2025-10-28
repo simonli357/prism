@@ -148,7 +148,7 @@ class GridMapToWebDataset:
         self.show = args.show if args.show is not None else bool(rospy.get_param("~show", False))
 
         # WebDataset writer params
-        self.wds_pattern = str(rospy.get_param("~wds_pattern", "/media/slsecret/T7/carla3/data/town2/gridmap_wds/shard-%06d.tar"))
+        self.wds_pattern = str(rospy.get_param("~wds_pattern", "/media/slsecret/T7/carla3/data/town7b/gridmap_wds/shard-%06d.tar"))
         self.wds_maxcount = int(rospy.get_param("~wds_maxcount", 300))
         self.wds_maxsize_mb = int(rospy.get_param("~wds_maxsize_mb", 1024))  # 0 = ignore
         os.makedirs(os.path.dirname(self.wds_pattern), exist_ok=True)

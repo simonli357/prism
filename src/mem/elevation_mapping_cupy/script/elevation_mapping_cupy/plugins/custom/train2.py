@@ -20,6 +20,7 @@ try:
     from .plotter import _read_training_log_csv, _plot_metric, _save_training_plots
     from .evaluate3 import run_inference
     from .train_utils import *
+    from .color_mapping import color28_to_onehot14, color28_to_color14, onehot14_to_color, SEM_CHANNELS, NEW_CLASSES
 except ImportError:
     from unet_conv_lstm import UNetConvLSTM
     from unet_attention import AttentionUNetConvLSTM
@@ -28,82 +29,9 @@ except ImportError:
     from cnn import CNNCorrectionNetSingle
     from plotter import _read_training_log_csv, _plot_metric, _save_training_plots
     from evaluate3 import run_inference
-
-try:
-    from .color_mapping import color28_to_onehot14, color28_to_color14, onehot14_to_color, SEM_CHANNELS, NEW_CLASSES
-except ImportError:
     from color_mapping import color28_to_onehot14, color28_to_color14, onehot14_to_color, SEM_CHANNELS, NEW_CLASSES
 
 import random
-def set_seed(seed=357):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-def _latest_epoch_ckpt(path_dir, prefix="checkpoint_epoch_", ext=".pt"):
-    if not os.path.isdir(path_dir): 
-        return None
-    cks = [p for p in os.listdir(path_dir) if p.startswith(prefix) and p.endswith(ext)]
-    if not cks:
-        return None
-    cks.sort()  # names are zero-padded, so lexical sort works
-    return os.path.join(path_dir, cks[-1])
-def _to_serializable(obj):
-    if isinstance(obj, (set, tuple)):
-        return list(obj)
-    if hasattr(obj, "state_dict"):
-        return str(obj.__class__.__name__)
-    try:
-        json.dumps(obj)
-        return obj
-    except Exception:
-        return str(obj)
-
-def save_json(path, data_dict):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data_dict, f, indent=2, default=_to_serializable)
-    
-def model_num_params(model):
-    total = sum(p.numel() for p in model.parameters())
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    return {"total": int(total), "trainable": int(trainable)}
-
-def env_info():
-    return {
-        "python": sys.version,
-        "platform": platform.platform(),
-        "torch": torch.__version__,
-        "cuda_is_available": torch.cuda.is_available(),
-        "cuda_version": torch.version.cuda if hasattr(torch.version, "cuda") else None,
-        "cudnn_version": torch.backends.cudnn.version() if torch.backends.cudnn.is_available() else None,
-        "device_count": torch.cuda.device_count(),
-        "devices": [
-            {"idx": i, "name": torch.cuda.get_device_name(i)} for i in range(torch.cuda.device_count())
-        ],
-    }
-
-def sha1_of_file(path, block_size=1<<20):
-    if not os.path.exists(path): return None
-    h = hashlib.sha1()
-    with open(path, "rb") as f:
-        while True:
-            b = f.read(block_size)
-            if not b: break
-            h.update(b)
-    return h.hexdigest()
-
-MODEL_SUFFIX = {
-    "cnn": "_cnn",
-    "unet": "_unet",
-    "unet_attn": "_unet_attention",
-    "deeplabv3p": "_deeplabv3p",
-}
-def resolve_out_dir(base_out: str, model_name: str) -> str:
-    """Append a model-specific suffix to the base_out path."""
-    suffix = MODEL_SUFFIX.get(model_name, f"_{model_name}")
-    return base_out.rstrip("/") + suffix
 
 def calculate_class_weights(shard_paths, seq_len, num_workers=4):
     print(f"Processing {len(shard_paths)} shards to calculate class weights...")
@@ -137,23 +65,14 @@ def calculate_class_weights(shard_paths, seq_len, num_workers=4):
     for i, count in enumerate(class_counts):
         print(f"Class {i:02d} ({NEW_CLASSES[i]}): {count.item():,}")
 
-    # --- Calculate Weights using ROBUST Inverse Log Frequency ---
     weights = torch.zeros(SEM_CHANNELS, dtype=torch.float32)
     
-    # We will compute weights for all classes with counts > 0 (excluding Unlabeled)
     valid_counts = class_counts[1:]
     present_classes_mask = valid_counts > 0
     
     if present_classes_mask.any():
-        # Formula: 1 / log(1.02 + count_for_present_classes)
-        # The 1.02 is a small offset to prevent log(1) = 0 for very rare classes
-        # and to give more weight to the rarest classes than log(1+count) would.
         log_weights = 1.0 / torch.log(1.02 + valid_counts[present_classes_mask])
-        
-        # Normalize the log_weights so they are in a reasonable range (e.g., sum to num_present_classes)
         log_weights = (log_weights / log_weights.mean())
-        
-        # Assign the calculated weights back to the main weights tensor
         weights[1:][present_classes_mask] = log_weights
     
     boost_factor_person = 5.0 
@@ -165,7 +84,6 @@ def calculate_class_weights(shard_paths, seq_len, num_workers=4):
         weights[11] *= boost_factor_water
     if weights[10] > 0:
         weights[10] *= boost_factor_vehicle
-    # Print any warnings for classes not found
     for i in range(1, SEM_CHANNELS):
         if class_counts[i] == 0:
             print(f"-> WARNING: Class {i} ({NEW_CLASSES[i]}) has 0 pixels. Its weight is set to 0.")
@@ -541,7 +459,6 @@ def train(args):
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
 
-            # running means
             epoch_steps   += 1
             epoch_loss_sum += float(loss.item())
             epoch_sem_sum  += float(loss_sem.item())
@@ -572,7 +489,6 @@ def train(args):
                 f"{metrics['bf_score']:.6f}\n"
             )
 
-        # record epoch stats (LRs BEFORE stepping the scheduler)
         lrs = [float(g["lr"]) for g in opt.param_groups]
         run_meta["lr_per_epoch"].append({
             "epoch": epoch,
@@ -624,16 +540,13 @@ def train(args):
                 "elev_rmse": float(metrics["elev_rmse"]),
             }
 
-        # plots (best-effort)
         try:
             _save_training_plots(log_file_path, run_out, lr_hist=lr_hist)
         except Exception as e:
             print(f"[plot] warning: {e}")
 
-        # incremental manifest write (crash-safe)
         _safe_save_json(os.path.join(run_out, "manifest.training.json"), run_meta)
 
-        # step scheduler for next epoch
         sched.step()
 
     # ======== final test ========
@@ -666,7 +579,6 @@ def train(args):
     print(f" >> Elev. RMSE:{test_metrics['elev_rmse']:.4f}")
     print("="*40 + "\n")
 
-    # finalize manifest
     run_meta["test_metrics"] = {
         "miou": float(test_metrics["miou"]),
         "pix_acc": float(test_metrics["pix_acc"]),
@@ -792,9 +704,6 @@ def calculate_batch_boundary_stats(pred_ids, gt_ids, unlabeled_id, tolerance=2):
     
     return tp, fp, fn
 
-# ----------------------------
-# CLI
-# ----------------------------
 def build_argparser():
     p = argparse.ArgumentParser(description="Train ConvLSTM U-Net with 14ch one-hot semantics (+elev).")
     p.add_argument("--shards", required=True, help="Directory with .tar shards or a pattern")
