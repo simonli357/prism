@@ -29,11 +29,11 @@ from tqdm import tqdm
 try:
     from .color_mapping import (color28_to_new14_indices_and_color, onehot14_to_color,
                                 NEW_CLASSES_VEHICLE_ID, NEW_CLASSES_UNLABELED_ID, SEM_CHANNELS,
-                                NEW_CLASSES_PERSON_ID, NEW_CLASSES_TWOWHEELER_ID)
+                                NEW_CLASSES_PERSON_ID)
 except ImportError:
     from color_mapping import (color28_to_new14_indices_and_color, onehot14_to_color,
                                NEW_CLASSES_VEHICLE_ID, NEW_CLASSES_UNLABELED_ID, SEM_CHANNELS,
-                               NEW_CLASSES_PERSON_ID, NEW_CLASSES_TWOWHEELER_ID)
+                               NEW_CLASSES_PERSON_ID)
     
 def _elev_to_heatmap_png(elev: np.ndarray, compression: int = 3) -> bytes:
     """
@@ -142,7 +142,6 @@ def _process_sample(sample: Dict[str, Any],
             target_classes = [
                 NEW_CLASSES_VEHICLE_ID,
                 # NEW_CLASSES_PERSON_ID,
-                NEW_CLASSES_TWOWHEELER_ID
             ]
             is_target_class_mask = np.isin(new_ids, target_classes)
             

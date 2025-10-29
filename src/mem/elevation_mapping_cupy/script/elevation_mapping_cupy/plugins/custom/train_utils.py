@@ -40,7 +40,7 @@ def set_seed(seed=357):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def _latest_epoch_ckpt(path_dir, prefix="checkpoint_epoch_", ext=".pt"):
+def latest_epoch_ckpt(path_dir, prefix="checkpoint_epoch_", ext=".pt"):
     if not os.path.isdir(path_dir): 
         return None
     cks = [p for p in os.listdir(path_dir) if p.startswith(prefix) and p.endswith(ext)]
@@ -48,7 +48,7 @@ def _latest_epoch_ckpt(path_dir, prefix="checkpoint_epoch_", ext=".pt"):
         return None
     cks.sort()  # names are zero-padded, so lexical sort works
     return os.path.join(path_dir, cks[-1])
-def _to_serializable(obj):
+def to_serializable(obj):
     if isinstance(obj, (set, tuple)):
         return list(obj)
     if hasattr(obj, "state_dict"):
@@ -62,7 +62,7 @@ def _to_serializable(obj):
 def save_json(path, data_dict):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
-        json.dump(data_dict, f, indent=2, default=_to_serializable)
+        json.dump(data_dict, f, indent=2, default=to_serializable)
     
 def model_num_params(model):
     total = sum(p.numel() for p in model.parameters())

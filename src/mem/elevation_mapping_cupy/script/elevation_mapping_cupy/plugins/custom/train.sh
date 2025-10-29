@@ -23,8 +23,8 @@ SAVE_LOGITS=false
 
 # Which models to run
 # MODELS=("cnn" "unet" "unet_attn" "deeplabv3p")
-# MODELS=("unet" "cnn" "deeplabv3p" "unet_attn")
-MODELS=("unet_attn")
+MODELS=("unet" "cnn" "deeplabv3p" "unet_correction")
+# MODELS=("unet_attn")
 # --------------------------
 
 # Small helper: map model -> suffix (must match your train2.py resolve_out_dir)
@@ -65,7 +65,7 @@ train_and_eval() {
     --include-mask "${INCLUDE_MASK}" \
     --loss-type "${LOSS_TYPE}" \
     --auto-class-weights "${AUTO_CLASS_WEIGHTS}" \
-    --resume /media/slsecret/T7/carla3/runs/all357${SUFFIX}
+    # --resume /media/slsecret/T7/carla3/runs/all357${SUFFIX}
 
   echo "✔ Completed model: ${MODEL}"
 }

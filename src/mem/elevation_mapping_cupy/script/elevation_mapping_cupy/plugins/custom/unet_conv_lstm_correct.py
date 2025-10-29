@@ -72,7 +72,6 @@ class UNetConvLSTM(nn.Module):
     def __init__(self, in_ch, base=64, out_ch=SEM_CHANNELS+1):
         super().__init__()
         assert out_ch == SEM_CHANNELS + 1, "This drop-in expects out_ch = SEM_CHANNELS + 1 (semantics + 1 elev)."
-        # self.in_ch = in_ch # We don't strictly need this, but good practice
 
         self.enc1 = ConvBlock(in_ch, base)           # -> base, H,   W
         self.enc2 = Down(base, base * 2)             # -> 2b,  H/2, W/2
@@ -103,6 +102,11 @@ class UNetConvLSTM(nn.Module):
 
         self.elev_dropout = nn.Dropout2d(p=0.1)
 
+        last_sem_conv = self.sem_head[-1]
+        if isinstance(last_sem_conv, nn.Conv2d):
+            nn.init.zeros_(last_sem_conv.weight)
+            nn.init.zeros_(last_sem_conv.bias)
+
         last_elev_conv = self.elev_head[-1]
         if isinstance(last_elev_conv, nn.Conv2d):
             nn.init.zeros_(last_elev_conv.weight)
@@ -112,7 +116,8 @@ class UNetConvLSTM(nn.Module):
         B, T, C, H, W = x.shape
 
         x_last = x[:, -1]
-        elev_in = x_last[:, SEM_CHANNELS:SEM_CHANNELS+1] # [B, 1, H, W]
+        sem_in = x_last[:, :SEM_CHANNELS]                 # [B, 14, H, W]
+        elev_in = x_last[:, SEM_CHANNELS:SEM_CHANNELS+1]  # [B, 1, H, W]
 
         feats = []
         for t in range(T):
@@ -130,13 +135,17 @@ class UNetConvLSTM(nn.Module):
         d2 = self.up2(bottleneck, skip2)             # [B, 2b, H/2, W/2]
         d1 = self.up1(d2,        skip1)              # [B, b,  H,   W]
 
-        sem_logits = self.sem_head(d1)               # [B, K, H, W]
+        d_sem = self.sem_head(d1)                    # [B, K, H, W]
+        # Convert input to logit space and apply correction
+        sem_logits_in = torch.log(sem_in.clamp_min(1e-6))
+        sem_logits_out = sem_logits_in + d_sem
 
+        # --- Elevation Head (already corrective) ---
         d2_up = F.interpolate(d2, size=d1.shape[-2:], mode="bilinear", align_corners=False)
         elev_in_features = torch.cat([d1, self.elev_dropout(d2_up)], dim=1)  # [B, b+2b, H, W]
         
         d_elev = self.elev_head(elev_in_features)    # [B, 1, H, W]
         elev_out = elev_in + d_elev
 
-        out = torch.cat([sem_logits, elev_out], dim=1)
+        out = torch.cat([sem_logits_out, elev_out], dim=1)
         return out
