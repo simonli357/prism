@@ -23,7 +23,6 @@ export PYTHONPATH=/opt/ros/noetic/lib/python3/dist-packages:$PYTHONPATH
 
 
 # --- 3. Configuration ---
-# --- MODIFIED: Get BAG_DIR from the first command-line argument ---
 if [ -z "$1" ]; then
     echo "Error: No bag directory provided."
     echo "Usage: ./grandtour_bag2frames.sh /path/to/bag/directory"
@@ -31,10 +30,9 @@ if [ -z "$1" ]; then
 fi
 BAG_DIR="$1" # Get the bag directory from the first argument
 FRAME_DIR="$BAG_DIR/frames"
-# --- End Modification ---
 
+SAVE_EVERY_N_FRAMES=4
 
-# --- 4. Main Execution Loop (OPTIMIZED) ---
 echo "Base Bag Directory: $BAG_DIR"
 echo "Base Output Directory: $FRAME_DIR"
 mkdir -p "$FRAME_DIR" # Create the main 'frames' directory
@@ -56,7 +54,6 @@ for BAG_FILE in "$BAG_DIR"/*.bag; do
     
     # Use a case statement to find the bag we want and assign its topics
     case "$(basename "$BAG_FILE")" in
-        # --- SKIPPED ALPHASENSE (GRAYSCALE) ---
         # *alphasense.bag)
         #     echo "-> Found Alphasense bag. Checking Alphasense topics..."
         #     TOPICS_TO_CHECK=(
@@ -75,29 +72,28 @@ for BAG_FILE in "$BAG_DIR"/*.bag; do
             )
             ;;
 
-        *hdr_left.bag)
-            echo "-> Found HDR Left bag. Checking HDR Left topic..."
-            TOPICS_TO_CHECK=(
-                ["/boxi/hdr/left/image_raw/compressed"]="hdr_left"
-            )
-            ;;
+        # *hdr_left.bag)
+        #     echo "-> Found HDR Left bag. Checking HDR Left topic..."
+        #     TOPICS_TO_CHECK=(
+        #         ["/boxi/hdr/left/image_raw/compressed"]="hdr_left"
+        #     )
+        #     ;;
             
-        *hdr_right.bag)
-            echo "-> Found HDR Right bag. Checking HDR Right topic..."
-            TOPICS_TO_CHECK=(
-                ["/boxi/hdr/right/image_raw/compressed"]="hdr_right"
-            )
-            ;;
+        # *hdr_right.bag)
+        #     echo "-> Found HDR Right bag. Checking HDR Right topic..."
+        #     TOPICS_TO_CHECK=(
+        #         ["/boxi/hdr/right/image_raw/compressed"]="hdr_right"
+        #     )
+        #     ;;
             
-        *zed2i_images.bag)
-            echo "-> Found ZED2i Images bag. Checking ZED2i topics..."
-            TOPICS_TO_CHECK=(
-                ["/boxi/zed2i/left/image_raw/compressed"]="zed2i_left"
-                ["/boxi/zed2i/right/image_raw/compressed"]="zed2i_right"
-            )
-            ;;
+        # *zed2i_images.bag)
+        #     echo "-> Found ZED2i Images bag. Checking ZED2i topics..."
+        #     TOPICS_TO_CHECK=(
+        #         ["/boxi/zed2i/left/image_raw/compressed"]="zed2i_left"
+        #         ["/boxi/zed2i/right/image_raw/compressed"]="zed2i_right"
+        #     )
+        #     ;;
 
-        # --- SKIPPED ZED2i DEPTH ---
         # *zed2i_depth.bag)
         #     echo "-> Found ZED2i Depth bag. Checking ZED2i topics..."
         #     TOPICS_TO_CHECK=(
@@ -106,7 +102,6 @@ for BAG_FILE in "$BAG_DIR"/*.bag; do
         #     )
         #     ;;
 
-        # --- SKIPPED ANYMAL DEPTH ---
         # *anymal_depth_cameras.bag)
         #     echo "-> Found Anymal Depth bag. Checking Anymal topics..."
         #     TOPICS_TO_CHECK=(
@@ -129,18 +124,18 @@ for BAG_FILE in "$BAG_DIR"/*.bag; do
     for TOPIC in "${!TOPICS_TO_CHECK[@]}"; do
         FOLDER_NAME=${TOPICS_TO_CHECK[$TOPIC]}
         
-        echo "  -> Processing Topic: $TOPIC"
+        echo "  -> Processing Topic: $TOPIC (Saving 1 every $SAVE_EVERY_N_FRAMES frames)"
         
         # Run the Python script
         python3 "$PYTHON_SCRIPT_PATH" \
             --bagfile "$BAG_FILE" \
             --topic "$TOPIC" \
             --output_dir "$FRAME_DIR" \
-            --subfolder "$FOLDER_NAME"
+            --subfolder "$FOLDER_NAME" \
+            --every_n_frames "$SAVE_EVERY_N_FRAMES" # <-- MODIFIED: Added new argument
     done
 done
 
 echo -e "\n-----------------------------------------------------"
 echo "All processing complete."
 echo "-----------------------------------------------------"
-

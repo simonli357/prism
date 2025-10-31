@@ -68,7 +68,7 @@ class ConvLSTM(nn.Module):
             h, c = self.cell(x_seq[:, t], h, c)
         return h
 
-class UNetConvLSTM(nn.Module):
+class UNetConvLSTMCorrection(nn.Module):
     def __init__(self, in_ch, base=64, out_ch=SEM_CHANNELS+1):
         super().__init__()
         assert out_ch == SEM_CHANNELS + 1, "This drop-in expects out_ch = SEM_CHANNELS + 1 (semantics + 1 elev)."

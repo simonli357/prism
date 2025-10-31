@@ -23,8 +23,8 @@ SAVE_LOGITS=false
 
 # Which models to run
 # MODELS=("cnn" "unet" "unet_attn" "deeplabv3p")
-MODELS=("unet" "cnn" "deeplabv3p" "unet_correction")
-# MODELS=("unet_attn")
+# MODELS=("unet" "cnn" "deeplabv3p" "unet_correction")
+MODELS=("unet_correction")
 # --------------------------
 
 # Small helper: map model -> suffix (must match your train2.py resolve_out_dir)
@@ -34,6 +34,7 @@ suffix_for_model() {
     unet)         echo "_unet" ;;
     unet_attn)    echo "_unet_attention" ;;
     deeplabv3p)   echo "_deeplabv3p" ;;
+    unet_correction)   echo "_unet_correction" ;;
     *)            echo "_${1}" ;;
   esac
 }

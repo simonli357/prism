@@ -13,6 +13,7 @@ import time, platform, sys, json, hashlib
 from datetime import datetime
 try:
     from .unet_conv_lstm import UNetConvLSTM
+    from .unet_conv_lstm_correct import UNetConvLSTMCorrection
     from .unet_attention import AttentionUNetConvLSTM
     from .shard_utils import resolve_shards, SeqFromWDS
     from .deeplabv3plus import DeepLabV3Plus
@@ -21,6 +22,7 @@ try:
     from .evaluate3 import run_inference
 except ImportError:
     from unet_conv_lstm import UNetConvLSTM
+    from unet_conv_lstm_correct import UNetConvLSTMCorrection
     from unet_attention import AttentionUNetConvLSTM
     from shard_utils import resolve_shards, SeqFromWDS
     from deeplabv3plus import DeepLabV3Plus
@@ -194,6 +196,8 @@ def build_model(args, C_in, C_out, device):
         model = AttentionUNetConvLSTM(in_ch=C_in, base=args.base, out_ch=C_out)
     elif args.model == "deeplabv3p":
         model = DeepLabV3Plus(in_ch=C_in, out_ch=C_out)
+    elif args.model == "unet_correction":
+        model = UNetConvLSTMCorrection(in_ch=C_in, base=args.base, out_ch=C_out)
     else:
         raise ValueError(f"Unknown model {args.model}")
     print(f"[INFO] Using model: {args.model}")
@@ -827,7 +831,7 @@ def build_argparser():
     p.add_argument(
         "--model",
         default="unet",
-        choices=["cnn", "unet", "unet_attn", "deeplabv3p"],
+        choices=["cnn", "unet", "unet_attn", "deeplabv3p", "unet_correction"],
         help="Backbone to use: cnn (two-stage correction), unet (ConvLSTM UNet), "
              "unet_attn (Attention ConvLSTM UNet), deeplabv3p (DeepLabV3+)."
     )
