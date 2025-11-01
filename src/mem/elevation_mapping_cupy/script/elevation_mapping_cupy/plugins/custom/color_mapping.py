@@ -10,7 +10,7 @@ try:
 except ImportError:
     cp = None
 
-SEM_CHANNELS = 11
+SEM_CHANNELS = 12
 
 # --- Original Class Definitions and Constants ---
 ORIG = [
@@ -48,6 +48,7 @@ NEW_CLASSES = [
     "Person",      # 8  (Pedestrian, Rider)
     "Vehicle",     # 9  (Car, Truck, Bus, Train, Bicycle, Motorcycle)
     "Water",       # 10
+    "Snow",        # 11
 ]
 CLASS_TRAVERSABILITY = np.array([
     0.3,  # 0: Unlabeled
